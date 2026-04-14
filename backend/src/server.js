@@ -82,6 +82,8 @@ async function gracefulShutdown(signal) {
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+console.log("DATABASE_URL exists?", !!process.env.DATABASE_URL);
+console.log("DATABASE_URL preview:", process.env.DATABASE_URL?.slice(0, 25));
 
 start().catch((error) => {
   console.error('Erro ao iniciar servidor:', error);
