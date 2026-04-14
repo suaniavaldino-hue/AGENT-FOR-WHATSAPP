@@ -316,7 +316,7 @@ export function mapConnection(row) {
     _id: String(row.id),
     id: String(row.id),
     userId: String(row.userid ?? row.userId),
-    userName: row.username ?? row.userName || '',
+    userName: row.username ?? row.userName ?? '',
     connectionName: row.connectionname ?? row.connectionName,
     mode: row.mode,
     status: row.status,
