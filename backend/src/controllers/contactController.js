@@ -22,7 +22,7 @@ export async function listContacts(req, res) {
     sql += ' WHERE c.assignedTo IS NULL OR c.assignedTo = ?';
     params.push(Number(req.user.id));
   }
-  sql += ' ORDER BY datetime(c.lastMessageAt) DESC';
+  sql += ' ORDER BY c.lastMessageAt DESC NULLS LAST, c.id DESC';
   const rows = await db.all(sql, params);
   res.json(rows.map(mapContact));
 }
@@ -78,7 +78,7 @@ export async function getConversation(req, res) {
      FROM messages m
      LEFT JOIN users u ON u.id = m.senderUserId
      WHERE m.contactId = ?
-     ORDER BY datetime(m.createdAt) ASC, m.id ASC`,
+     ORDER BY m.createdAt ASC, m.id ASC`,
     [req.params.id]
   );
   res.json(rows.map(mapMessage));

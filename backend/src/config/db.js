@@ -1,6 +1,5 @@
 import pg from "pg";
-import dotenv from "dotenv";
-dotenv.config();
+import { getDatabaseUrl, shouldUseSSL } from "./env.js";
 
 const { Pool } = pg;
 
@@ -30,21 +29,16 @@ export function parseJsonSafely(value, fallback) {
   }
 }
 
-export async function connectDB(databaseUrl = process.env.DATABASE_URL) {
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL não configurada");
-  }
-
+export async function connectDB(databaseUrl = getDatabaseUrl()) {
   if (pool) {
     return getDb();
   }
 
+  const sslEnabled = shouldUseSSL(databaseUrl);
+
   pool = new Pool({
     connectionString: databaseUrl,
-    ssl:
-      process.env.PGSSL === "true"
-        ? { rejectUnauthorized: false }
-        : undefined,
+    ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
   });
 
   await pool.query("SELECT 1");
@@ -164,7 +158,7 @@ export async function connectDB(databaseUrl = process.env.DATABASE_URL) {
     WHERE sortorder IS NULL OR sortorder = 0
   `);
 
-  console.log("PostgreSQL conectado");
+  console.log(`PostgreSQL conectado (${sslEnabled ? "SSL on" : "SSL off"})`);
   return getDb();
 }
 

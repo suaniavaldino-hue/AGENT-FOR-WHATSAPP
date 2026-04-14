@@ -2,9 +2,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { io } from 'socket.io-client';
 import Layout from '../components/Layout';
-import api from '../services/api';
+import api, { getSocketBaseUrl } from '../services/api';
 
-const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:4000');
+const socket = io(getSocketBaseUrl(), { transports: ['websocket', 'polling'] });
 
 function formatMessageType(type) {
   const map = {

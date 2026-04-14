@@ -18,7 +18,7 @@ function buildMockQr(connectionName) {
 }
 
 export async function listConnections(_, res) {
-  const rows = await getDb().all(`${selectSql} ORDER BY datetime(wc.createdAt) DESC, wc.id DESC`);
+  const rows = await getDb().all(`${selectSql} ORDER BY wc.createdAt DESC, wc.id DESC`);
   res.json(rows.map(mapConnection));
 }
 

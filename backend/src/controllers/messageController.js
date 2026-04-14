@@ -20,7 +20,7 @@ async function getConversationRows(contactId) {
     `SELECT m.*, u.name || ' ' || u.surname AS senderUserName, u.role AS senderUserRole, u.position AS senderUserPosition
      FROM messages m
      LEFT JOIN users u ON u.id = m.senderUserId
-     WHERE m.contactId = ? ORDER BY datetime(m.createdAt) ASC, m.id ASC`,
+     WHERE m.contactId = ? ORDER BY m.createdAt ASC, m.id ASC`,
     [contactId]
   );
 }

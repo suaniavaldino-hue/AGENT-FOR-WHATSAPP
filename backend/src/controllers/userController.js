@@ -27,7 +27,7 @@ function ensurePayload(body, current = null) {
 }
 
 export async function listUsers(_, res) {
-  const rows = await getDb().all('SELECT * FROM users ORDER BY datetime(createdAt) DESC');
+  const rows = await getDb().all('SELECT * FROM users ORDER BY createdAt DESC');
   res.json(rows.map(mapUser));
 }
 

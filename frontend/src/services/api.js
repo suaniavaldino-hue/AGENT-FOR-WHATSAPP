@@ -1,14 +1,23 @@
-import axios from 'axios';
+import axios from "axios";
 
-const rawBaseUrl = import.meta.env.VITE_API_URL?.trim();
-const normalizedBaseUrl = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, '') : '';
+export function getApiBaseUrl() {
+  const rawBaseUrl = import.meta.env.VITE_API_URL?.trim();
+  const normalizedBaseUrl = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, "") : "";
+  return normalizedBaseUrl ? `${normalizedBaseUrl}/api` : "/api";
+}
+
+export function getSocketBaseUrl() {
+  const rawBaseUrl = import.meta.env.VITE_API_URL?.trim();
+  return rawBaseUrl ? rawBaseUrl.replace(/\/+$/, "") : window.location.origin.replace(/\/+$/, "");
+}
 
 const api = axios.create({
-  baseURL: normalizedBaseUrl ? `${normalizedBaseUrl}/api` : '/api'
+  baseURL: getApiBaseUrl(),
+  timeout: 30000
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
