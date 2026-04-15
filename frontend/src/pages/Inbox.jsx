@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import Layout from '../components/Layout';
 import api, { getSocketBaseUrl } from '../services/api';
@@ -34,6 +33,22 @@ function computeResponseTime(messages, currentIndex) {
   return '';
 }
 
+function createLocalMessage({ text, type }) {
+  return {
+    _id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `local-${Date.now()}`,
+    senderType: 'agent',
+    senderUserName: 'Você',
+    text,
+    type,
+    direction: 'outbound',
+    status: 'sending',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    meta: ['image', 'video', 'audio', 'link'].includes(type) ? { url: text } : {}
+  };
+}
+
 export default function Inbox() {
   const [contacts, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -41,51 +56,82 @@ export default function Inbox() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const messagesEndRef = useRef(null);
 
-  async function loadBase() {
+  async function loadBase(nextSelectedId = null) {
     const [{ data: contactsData }, usersRes] = await Promise.all([
       api.get('/contacts'),
       api.get('/users').catch(() => ({ data: [] }))
     ]);
     setContacts(contactsData);
     setUsers(usersRes.data || []);
-    if (!selected && contactsData.length) setSelected(contactsData[0]);
+
+    const targetId = nextSelectedId || selected?._id;
+    if (contactsData.length === 0) {
+      setSelected(null);
+      return;
+    }
+
+    const updatedSelected = contactsData.find((item) => item._id === targetId) || contactsData[0];
+    setSelected(updatedSelected);
   }
 
   async function loadMessages(contactId) {
+    if (!contactId) return;
     const { data } = await api.get(`/contacts/${contactId}/messages`);
     setMessages(data);
   }
 
   async function handleSend() {
-    if (!selected) return;
+    if (!selected || sending) return;
     const cleanText = text.trim();
     if (!cleanText) return;
-    const payload = ['image', 'video', 'audio', 'link'].includes(type)
-      ? { contactId: selected._id, type, text: cleanText, meta: { url: cleanText } }
-      : { contactId: selected._id, type, text: cleanText };
-    await api.post('/messages/send', payload);
-    setText('');
-    setType('text');
-    loadMessages(selected._id);
-    loadBase();
+
+    setError('');
+    setSending(true);
+    const optimisticMessage = createLocalMessage({ text: cleanText, type });
+    setMessages((current) => [...current, optimisticMessage]);
+
+    try {
+      const payload = ['image', 'video', 'audio', 'link'].includes(type)
+        ? { contactId: selected._id, type, text: cleanText, meta: { url: cleanText } }
+        : { contactId: selected._id, type, text: cleanText };
+
+      await api.post('/messages/send', payload);
+      setText('');
+      setType('text');
+      await Promise.all([loadMessages(selected._id), loadBase(selected._id)]);
+    } catch (requestError) {
+      setMessages((current) => current.filter((item) => item._id !== optimisticMessage._id));
+      setError(requestError?.response?.data?.message || 'Não foi possível enviar a mensagem.');
+    } finally {
+      setSending(false);
+    }
   }
 
   async function assignContact(userId) {
     if (!selected) return;
-    await api.put(`/contacts/${selected._id}`, { assignedTo: userId });
-    loadBase();
+    await api.put(`/contacts/${selected._id}`, { assignedTo: userId || null });
+    loadBase(selected._id);
   }
 
   useEffect(() => { loadBase(); }, []);
   useEffect(() => { if (selected?._id) loadMessages(selected._id); }, [selected?._id]);
   useEffect(() => {
     socket.on('conversation:update', ({ contactId, messages: newMessages }) => {
-      if (selected?._id === contactId) setMessages(newMessages);
-      loadBase();
+      if (selected?._id === contactId) {
+        setMessages(newMessages);
+      }
+      loadBase(selected?._id || contactId);
     });
     return () => socket.off('conversation:update');
   }, [selected?._id]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages]);
 
   const selectedContact = useMemo(() => contacts.find((c) => c._id === selected?._id) || selected, [contacts, selected]);
 
@@ -94,6 +140,7 @@ export default function Inbox() {
       <div className="grid grid-cols-[320px_1fr_320px] gap-4 h-[calc(100vh-48px)]">
         <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-auto">
           <div className="p-4 border-b border-slate-800 text-lg font-semibold">Conversas</div>
+          {contacts.length === 0 && <div className="p-4 text-sm text-slate-400">Nenhuma conversa ainda. As conversas aparecem aqui assim que chegar ou sair uma mensagem.</div>}
           {contacts.map((contact) => (
             <button key={contact._id} onClick={() => setSelected(contact)} className="w-full text-left p-4 border-b border-slate-800 hover:bg-slate-800">
               <div className="font-semibold">{contact.name}</div>
@@ -107,6 +154,7 @@ export default function Inbox() {
         <div className="rounded-3xl bg-slate-900 border border-slate-800 flex flex-col">
           <div className="p-4 border-b border-slate-800 font-semibold">{selectedContact?.name || 'Selecione uma conversa'}</div>
           <div className="flex-1 overflow-auto p-4 space-y-3">
+            {messages.length === 0 && <div className="text-sm text-slate-400">Nenhuma mensagem nesta conversa ainda.</div>}
             {messages.map((message, index) => (
               <div key={message._id} className={`max-w-[75%] rounded-2xl p-3 ${message.direction === 'outbound' ? 'bg-emerald-500 ml-auto' : 'bg-slate-800'}`}>
                 <div className="text-xs opacity-80">{message.senderUserName || message.senderType} {message.senderUserPosition ? `• ${message.senderUserPosition}` : ''}</div>
@@ -119,11 +167,14 @@ export default function Inbox() {
                 )}
                 <div className="text-[11px] mt-1 opacity-75">{formatMessageType(message.type)}</div>
                 <div className="text-[11px] opacity-75">{new Date(message.createdAt).toLocaleString('pt-BR')}</div>
+                {message.status === 'sending' && <div className="text-[11px] opacity-90">Enviando...</div>}
                 {computeResponseTime(messages, index) && <div className="text-[11px] opacity-90">{computeResponseTime(messages, index)}</div>}
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
           <div className="p-4 border-t border-slate-800 space-y-3">
+            {error && <div className="rounded-xl bg-rose-500/15 border border-rose-500/30 p-3 text-sm text-rose-200">{error}</div>}
             <div className="flex gap-3">
               <select className="rounded-xl bg-slate-800 p-3" value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="text">Texto</option>
@@ -132,8 +183,8 @@ export default function Inbox() {
                 <option value="audio">Áudio</option>
                 <option value="link">Link</option>
               </select>
-              <input className="flex-1 rounded-xl bg-slate-800 p-3" value={text} onChange={(e) => setText(e.target.value)} placeholder={type === 'text' ? 'Digite a mensagem...' : 'Cole a URL ou descrição...'} />
-              <button onClick={handleSend} className="rounded-xl bg-emerald-500 px-5 font-semibold">Enviar</button>
+              <input className="flex-1 rounded-xl bg-slate-800 p-3" value={text} onChange={(e) => setText(e.target.value)} placeholder={type === 'text' ? 'Digite a mensagem...' : 'Cole a URL ou descrição...'} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
+              <button onClick={handleSend} disabled={!selected || sending} className="rounded-xl bg-emerald-500 px-5 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">{sending ? 'Enviando...' : 'Enviar'}</button>
             </div>
           </div>
         </div>
